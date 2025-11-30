@@ -1,0 +1,63 @@
+{
+  "id": "door-cutin",
+  "title": "Door Cut-in",
+  "description": "Adds an interactive, full-screen cut-in when a player clicks on a door — letting them choose to push, pick lock, or leave before the door opens.",
+  "version": "0.1.0",
+  "authors": [
+    {
+      "name": "wintrecurse",
+      "url": "https://github.com/yourname"
+    }
+  ],
+  "compatibility": {
+    "minimum": "11",
+    "verified": "12"
+  },
+
+  "scripts": [
+  ],
+
+  "esmodules": [
+    "scripts/main.js",
+    "scripts/ui.js",
+    "scripts/ui-tile.js",
+    "scripts/tile-trap.js"
+  ],
+
+  "styles": [
+    "styles/module.css"
+  ],
+
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    },
+    {
+      "lang": "zh",
+      "name": "中文",
+      "path": "lang/zh.json"
+    }
+  ],
+
+  "packs": [],
+
+  "relationships": {
+    "requires": [
+    {
+      "id": "sequencer",
+      "type": "module",
+      "compatibility": { "verified": "12" }
+    }
+    ],
+    "optional": []
+  },
+
+  "manifest": "https://your.domain/fvtt-door-cutin/module.json",
+  "download": "https://your.domain/fvtt-door-cutin/door-cutin-v0.1.0.zip",
+  "readme": "https://your.domain/fvtt-door-cutin/README.md",
+
+  "license": "MIT",
+  "bugs": "https://github.com/yourname/fvtt-door-cutin/issues"
+}

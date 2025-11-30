@@ -1,0 +1,296 @@
+// modules/door-cutin/scripts/tile-trap.js 
+// 负责“踩 Tile 陷阱 播放特写 + 广播给 GM/所有人”
+
+const MOD_ID = "door-cutin";
+
+function debugEnabled() {
+  try {
+    return game.settings.get(MOD_ID, "debug");
+  } catch {
+    return false;
+  }
+}
+
+function trapLog(...args) {
+  if (debugEnabled()) {
+    console.log(`${MOD_ID} | trap |`, ...args);
+  }
+}
+
+Hooks.once("ready", () => {
+  trapLog("tile trap system ready");
+});
+
+Hooks.on("canvasReady", () => {
+  trapLog("tile trap | canvasReady");
+});
+
+/**
+ * 使用 preUpdateToken：
+ * 用 tokenDoc 的旧坐标 和 change 里的新坐标，判断
+ * “这一脚是不是从 tile 外 → tile 内（发生矩形相交）”
+ */
+Hooks.on("preUpdateToken", (tokenDoc, change, options, userId) => {
+  if (!canvas?.scene) return;
+
+  if (!("x" in change) && !("y" in change)) return;
+  if (userId !== game.user.id) return;
+
+  const gridSize = canvas.grid.size ?? 100;
+  const w = (tokenDoc.width  ?? 1) * gridSize;
+  const h = (tokenDoc.height ?? 1) * gridSize;
+
+  const fromRect = {
+    x: tokenDoc.x,
+    y: tokenDoc.y,
+    w,
+    h
+  };
+
+  const toRect = {
+    x: change.x ?? tokenDoc.x,
+    y: change.y ?? tokenDoc.y,
+    w,
+    h
+  };
+
+  trapLog("preUpdateToken move", {
+    tokenId: tokenDoc.id,
+    from: { x: fromRect.x, y: fromRect.y },
+    to:   { x: toRect.x,   y: toRect.y }
+  });
+
+  for (const tile of canvas.tiles.placeables) {
+    const cfg = tile.document.getFlag(MOD_ID, "tileTrap");
+    if (!cfg || cfg.enabled === false) continue;
+
+    const mode = cfg.mode || "once"; // once / repeat
+    if (mode === "once" && cfg.armed === false) continue;
+
+    const wasInside = rectIntersectsTile(fromRect, tile);
+    const insideNow = rectIntersectsTile(toRect, tile);
+
+    trapLog("trap | check tile", {
+      tileId: tile.id,
+      tileName: tile.document.name,
+      wasInside,
+      insideNow
+    });
+
+    // 只有“上一格不相交 & 这一格相交”时才触发
+    if (!wasInside && insideNow) {
+      handleTrapTrigger(tile, cfg, tokenDoc, userId);
+    }
+  }
+});
+
+/** 判断 token 矩形是否与 tile 矩形相交 */
+function rectIntersectsTile(tokenRect, tile) {
+  const tx = tile.document.x;
+  const ty = tile.document.y;
+  const tw = tile.document.width;
+  const th = tile.document.height;
+
+  const tRight  = tx + tw;
+  const tBottom = ty + th;
+
+  const aLeft   = tokenRect.x;
+  const aTop    = tokenRect.y;
+  const aRight  = tokenRect.x + tokenRect.w;
+  const aBottom = tokenRect.y + tokenRect.h;
+
+  const separated =
+    aRight  <= tx      ||
+    aLeft   >= tRight  ||
+    aBottom <= ty      ||
+    aTop    >= tBottom;
+
+  return !separated;
+}
+
+/**
+ * 真正处理陷阱触发：
+ *  - once 模式：armed -> false
+ *  - 脚下 Sequencer 特效（支持两个 fx，loop + size）
+ *  - （可选）全屏 cut-in
+ *  - 豁免弹窗
+ *  - 广播
+ */
+async function handleTrapTrigger(tile, cfg, tokenDoc, userId) {
+  const mode      = cfg.mode || "once";
+  const video     = cfg.video || null;
+  const sound     = cfg.sound || null;
+  const actor     = tokenDoc.actor;
+
+  // 收集 ground FX：
+  const fxList = [];
+
+  // 新版 fx1 / fx2
+  if (cfg.fx1?.path) {
+    fxList.push({
+      path: cfg.fx1.path,
+      loop: !!cfg.fx1.loop,
+      size: Number(cfg.fx1.size) || 5
+    });
+  }
+  if (cfg.fx2?.path) {
+    fxList.push({
+      path: cfg.fx2.path,
+      loop: !!cfg.fx2.loop,
+      size: Number(cfg.fx2.size) || 5
+    });
+  }
+
+  // 兼容旧字段 groundFx：当 fx1/fx2 都没配时用它
+  if (!fxList.length && cfg.groundFx) {
+    fxList.push({
+      path: cfg.groundFx,
+      loop: false,
+      size: 5
+    });
+  }
+
+  trapLog("handleTrapTrigger", {
+    tileId: tile.id,
+    tileName: tile.document.name,
+    mode,
+    video,
+    sound,
+    fxList,
+    actor: actor?.name
+  });
+
+  if (mode === "once") {
+    const newCfg = foundry.utils.mergeObject(
+      cfg,
+      { armed: false },
+      { inplace: false }
+    );
+    await tile.document.setFlag(MOD_ID, "tileTrap", newCfg);
+    trapLog("trap disarmed (once mode)", { tileId: tile.id });
+  }
+
+  const tokenObj = canvas.tokens.get(tokenDoc.id);
+
+  // 脚下爆炸特效（可能有多个）
+  if (userId === game.user.id && fxList.length && typeof Sequence !== "undefined" && tokenObj) {
+    try {
+      const seq = new Sequence();
+
+      for (const fx of fxList) {
+        const size = fx.size || 5;
+
+        let eff = seq.effect()
+          .file(fx.path)
+          .atLocation(tokenObj)
+          .belowTokens(false)
+          .scaleToObject(size); // 大致等于 token 尺寸的 size 倍
+
+        if (fx.loop) {
+          eff.persist(); // 持续播放，需用 Sequencer 的 UI 手动清理
+        }
+      }
+
+      await seq.play({ broadcast: false });
+    } catch (e) {
+      console.error("door-cutin | trap groundFx error:", e);
+    }
+  }
+
+  // 全屏 cut-in（可选）
+  if (userId === game.user.id && window.DoorCutin?.testLocal && video) {
+    window.DoorCutin.testLocal(video, sound);
+  }
+
+  // 豁免对话框（只对触发者自己）
+  if (userId === game.user.id && actor) {
+    await showTrapSaveDialog(actor, cfg);
+  }
+
+  // 广播给 GM / 其他玩家
+  notifyTrapTriggered(actor, tile, mode);
+}
+
+/** 弹出豁免相关对话框 */
+async function showTrapSaveDialog(actor, cfg) {
+  const saveAbility = cfg.saveAbility || "dex";
+  const saveDc      = Number.isFinite(cfg.saveDc) ? cfg.saveDc : 15;
+  const promptText  = cfg.promptText || "一颗火球在你脚下爆炸！请进行一次敏捷豁免检定。";
+  const successText = cfg.successText || "你敏捷地闪到一旁，只受到了极小的伤害。";
+  const failText    = cfg.failText || "你被火焰吞没，感到一阵剧痛！（伤害由 DM 掷骰）";
+
+  return new Promise(resolve => {
+    const d = new Dialog({
+      title: "火球陷阱！",
+      content: `<p>${promptText}</p>`,
+      buttons: {
+        save: {
+          label: `进行豁免检定 (DC ${saveDc})`,
+          callback: async () => {
+            const success = await rollTrapSave(actor, {
+              ability: saveAbility,
+              dc: saveDc
+            });
+
+            const msg = success ? successText : failText;
+
+            new Dialog({
+              title: success ? "豁免成功" : "豁免失败",
+              content: `<p>${msg}</p>`,
+              buttons: {
+                ok: {
+                  label: "确定",
+                  callback: () => resolve(success)
+                }
+              },
+              default: "ok"
+            }).render(true);
+          }
+        }
+      },
+      default: "save",
+      close: () => resolve(null)
+    });
+    d.render(true);
+  });
+}
+
+/** D&D5e 能力豁免检定 */
+async function rollTrapSave(actor, { ability, dc }) {
+  let roll = null;
+
+  try {
+    if (game.system.id === "dnd5e" && actor.rollAbilitySave) {
+      roll = await actor.rollAbilitySave(ability, { fastForward: true });
+    }
+
+    if (!roll) {
+      roll = await (new Roll("1d20")).roll({ async: true });
+      roll.toMessage({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        flavor: `Trap Save (${ability.toUpperCase()})`
+      });
+    }
+  } catch (e) {
+    console.error("door-cutin | rollTrapSave error:", e);
+    return true;
+  }
+
+  const total = roll.total ?? 999;
+  return total >= dc;
+}
+
+/** 广播“某玩家触发了陷阱” */
+function notifyTrapTriggered(actor, tile, mode) {
+  try {
+    game.socket.emit(`module.${MOD_ID}`, {
+      type: "trap-trigger",
+      actorName: actor?.name || game.user.name,
+      tileName: tile.document.name || "",
+      mode,
+      userId: game.user.id
+    });
+  } catch (e) {
+    console.error("door-cutin | trap notify error:", e);
+  }
+}
