@@ -25,6 +25,12 @@
 
     Hooks.on("renderTileConfig", (app, html, data) => {
       try {
+        // 放大 TileConfig 窗口
+        const win = html.closest(".app");
+        // 宽一点
+        win.css("width", "600px");
+        // 内容区域高一点，少滚动
+        win.find(".window-content").css("max-height", "900px");
         injectTrapConfig(app, html, data);
         activateFilePickers(app, html);
       } catch (e) {
@@ -123,7 +129,11 @@
           <select name="flags.${MOD_ID}.tileTrap.macros.${i}" style="flex:1;">
             ${buildMacroOptions(id)}
           </select>
-          <button type="button" class="macro-remove" data-index="${i}" style="flex:0 0 auto;">
+          <button type="button"
+                  class="macro-remove"
+                  data-index="${i}"
+                  title="删除"
+                  style="flex:0 0 auto;padding:0 4px;width:22px;min-width:22px;text-align:center;">
             <i class="fas fa-trash"></i>
           </button>
         </div>`;
@@ -319,15 +329,18 @@
           <p class="hint">（可选）这张图片会显示在陷阱豁免弹窗的顶部。</p>
         </div>
 
-        <!-- ⭐ 触发脚本宏（可选，多条） -->
+        <!-- 触发脚本宏（可选，多条） -->
         <div class="form-group">
-          <label>触发宏（无限个）</label>
-          <div class="macro-list">
-            ${macroRowsHtml}
+          <label>触发宏</label>
+          <!-- 用 form-fields 包起来，并改成纵向排列 -->
+          <div class="form-fields" style="flex-direction:column;align-items:flex-start;">
+            <div class="macro-list" style="width:100%;">
+              ${macroRowsHtml}
+            </div>
+            <button type="button" class="macro-add" style="margin-top:4px;">
+              <i class="fas fa-plus"></i> 添加宏
+            </button>
           </div>
-          <button type="button" class="macro-add">
-            <i class="fas fa-plus"></i> 添加宏
-          </button>
           <p class="hint">陷阱触发时会从上到下依次执行这些宏。</p>
         </div>
 
@@ -357,10 +370,22 @@
       scope.find("button.macro-remove").each((i, btn) => {
         $(btn).off(".doorcutin").on("click.doorcutin", ev => {
           ev.preventDefault();
-          $(ev.currentTarget).closest(".macro-row").remove();
+
+          const row   = $(ev.currentTarget).closest(".macro-row");
+          const index = row.data("index");              // 原来的 macros.<index>
+          const formEl = form[0];                      // 上面 const form = html.find("form");
+
+          // 用 Foundry 的 "-=" 语法告诉它删除这个键
+          $(`<input type="hidden"
+                    name="flags.${MOD_ID}.tileTrap.macros.-=${index}"
+                    value="1">`).appendTo(formEl);
+
+          // 再从界面上移除这一行
+          row.remove();
         });
       });
     }
+
     bindRemoveHandlers(macroListDiv);
 
     fieldset.find("button.macro-add").off(".doorcutin").on("click.doorcutin", ev => {
@@ -372,8 +397,12 @@
           <select name="flags.${MOD_ID}.tileTrap.macros.${newIndex}" style="flex:1;">
             ${buildMacroOptions("")}
           </select>
-          <button type="button" class="macro-remove" data-index="${newIndex}" style="flex:0 0 auto;">
-            <i class="fas fa-trash"></i>
+          <button type="button"
+                  class="macro-remove"
+                  data-index="${newIndex}"
+                  title="删除此宏"
+                  style="flex:0 0 auto;padding:0 6px;white-space:nowrap;max-width:4.5rem;">
+            <i class="fas fa-trash"></i><span style="margin-left:2px;">删除</span>
           </button>
         </div>
       `);
