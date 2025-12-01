@@ -6,7 +6,7 @@
   "authors": [
     {
       "name": "wintrecurse",
-      "url": "https://github.com/yourname"
+      "url": "https://github.com/Misato-R/door-cutin.git"
     }
   ],
   "compatibility": {
@@ -54,10 +54,10 @@
     "optional": []
   },
 
-  "manifest": "https://your.domain/fvtt-door-cutin/module.json",
-  "download": "https://your.domain/fvtt-door-cutin/door-cutin-v0.1.0.zip",
-  "readme": "https://your.domain/fvtt-door-cutin/README.md",
+  "manifest": "https://github.com/Misato-R/door-cutin.git",
+  "download": "https://github.com/Misato-R/door-cutin/archive/refs/heads/main.zip",
+  "readme": "https://github.com/Misato-R/door-cutin/README.md",
 
   "license": "MIT",
-  "bugs": "https://github.com/yourname/fvtt-door-cutin/issues"
+  "bugs": "https://github.com/Misato-R/door-cutin/issues"
 }
