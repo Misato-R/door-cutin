@@ -1,17 +1,9 @@
-// 未来会包含：为单扇门配置图片、检定开关与 DC 的表单；以及测试播放按钮
-console.log("door-cutin | ui placeholder loaded");
-
-
-// ui.js —— Door Cut-in 的墙体配置 UI
-// 稳定方案：直接在“门选项”下面插一个大块
-
-// ui.js —— Door Cut-in 的墙体配置 UI
-// 稳定方案：直接在“门选项”下面插一个大块
+// ui.js —— Door Cut-in 的墙体配置 UI（Tab 版）
 
 Hooks.on("renderWallConfig", (app, html, data) => {
-  const wall = app.object;
+  const wall = app.object ?? app.document;
   // 只对“门”生效
-  if (wall.door === 0) return;
+  if (!wall || wall.door === 0) return;
 
   console.log("door-cutin | renderWallConfig");
 
@@ -31,10 +23,8 @@ Hooks.on("renderWallConfig", (app, html, data) => {
 
   const softSuccessText = cfg.softSuccessText || "";
   const softFailText    = cfg.softFailText    || "";
-  // 软开门默认：成功后关闭，失败后也关闭（保持你现在的行为）
   const softCloseOnSuccess = cfg.softCloseOnSuccess !== false;
   const softCloseOnFail    = cfg.softCloseOnFail    !== false;
-
 
   // 踹门配置
   const hardEnabled  = cfg.enableHard  !== false;
@@ -47,42 +37,27 @@ Hooks.on("renderWallConfig", (app, html, data) => {
 
   const hardSuccessText = cfg.hardSuccessText || "";
   const hardFailText    = cfg.hardFailText    || "";
-  // 踹门默认：成功后关闭，失败后不关闭（也保持你现在的行为）
   const hardCloseOnSuccess = cfg.hardCloseOnSuccess !== false;
   const hardCloseOnFail    = !!cfg.hardCloseOnFail;
 
-  //离开配置
+  // 离开配置
   const leaveEnabled  = cfg.enableLeave !== false;
   const leaveLabel    = cfg.leaveLabel  || "转身离开";
-
   const leaveVideo    = cfg.videoLeave  || "";
   const leaveSound    = cfg.soundLeave  || "";
-
   const leaveSuccessText = cfg.leaveSuccessText || "";
   const leaveFailText    = cfg.leaveFailText    || "";
-
-  // 默认：离开时成功/失败都不关闭 Door-Cutin（以后你想改再调）
   const leaveCloseOnSuccess = !!cfg.leaveCloseOnSuccess;
   const leaveCloseOnFail    = !!cfg.leaveCloseOnFail;
-
-
 
   const form = html.find("form");
   if (!form.length) return;
 
-  // 找一个合适的锚点（门选项 fieldset 或 ds 下拉）
-  let anchor = html.find("fieldset.door-options");
-  if (!anchor.length) {
-    anchor = html.find('select[name="ds"]').closest(".form-group");
-  }
-  if (!anchor.length) {
-    anchor = form.children().last();
-  }
+  // 如果已经有 Door-Cutin tab，避免重复注入
+  if (html.find(".door-cutin-wall-tab").length) return;
 
-  // 防止重复插入
-  if (html.find(".door-cutin-ui-block").length) return;
-
-  const block = $(`
+  // ===== Door-Cutin 整个表单块 HTML =====
+  const blockHtml = `
     <fieldset class="door-cutin-ui-block">
       <legend>
         <i class="fas fa-film"></i>
@@ -130,19 +105,16 @@ Hooks.on("renderWallConfig", (app, html, data) => {
       <div class="form-group">
         <label>动作：轻轻推开</label>
         <div class="form-fields" style="display:flex;align-items:center;gap:0.5em;">
-          <!-- ① 按钮文字 -->
           <input type="text"
                  name="doorcutin-soft-label"
                  value="${softLabel}"
                  style="flex:1;">
 
-          <!-- ② 启用开关 -->
           <label style="white-space:nowrap;">
             <input type="checkbox" name="doorcutin-soft-enabled" ${softEnabled ? "checked" : ""}>
             启用此按钮
           </label>
 
-          <!-- ③ 检定设置（类型 + key） -->
           <div style="display:flex;align-items:center;gap:0.25em;">
             <select name="doorcutin-soft-rollType">
               <option value="none"   ${softRollType === "none"   ? "selected" : ""}>不检定</option>
@@ -156,7 +128,6 @@ Hooks.on("renderWallConfig", (app, html, data) => {
                    placeholder="ste / str 等">
           </div>
 
-          <!-- ④ DC -->
           <label style="white-space:nowrap;">
             DC：
             <input type="number"
@@ -233,24 +204,20 @@ Hooks.on("renderWallConfig", (app, html, data) => {
 
       <hr>
 
-
       <!-- 一脚踹开 -->
       <div class="form-group">
         <label>动作：一脚踹开</label>
         <div class="form-fields" style="display:flex;align-items:center;gap:0.5em;">
-          <!-- ① 按钮文字 -->
           <input type="text"
                  name="doorcutin-hard-label"
                  value="${hardLabel}"
                  style="flex:1;">
 
-          <!-- ② 启用开关 -->
           <label style="white-space:nowrap;">
             <input type="checkbox" name="doorcutin-hard-enabled" ${hardEnabled ? "checked" : ""}>
             启用此按钮
           </label>
 
-          <!-- ③ 检定设置 -->
           <div style="display:flex;align-items:center;gap:0.25em;">
             <select name="doorcutin-hard-rollType">
               <option value="none"   ${hardRollType === "none"   ? "selected" : ""}>不检定</option>
@@ -264,7 +231,6 @@ Hooks.on("renderWallConfig", (app, html, data) => {
                    placeholder="str / ath 等">
           </div>
 
-          <!-- ④ DC -->
           <label style="white-space:nowrap;">
             DC：
             <input type="number"
@@ -341,7 +307,6 @@ Hooks.on("renderWallConfig", (app, html, data) => {
 
       <hr>
 
-
       <!-- 转身离开 -->
       <div class="form-group">
         <label>动作：转身离开</label>
@@ -351,6 +316,7 @@ Hooks.on("renderWallConfig", (app, html, data) => {
             启用此按钮
           </label>
         </div>
+
         <div class="form-group">
           <label>按钮文字</label>
           <div class="form-fields">
@@ -360,6 +326,7 @@ Hooks.on("renderWallConfig", (app, html, data) => {
                    style="width:100%;">
           </div>
         </div>
+
         <p class="hint">
           选择“转身离开”时，不会改变门的状态，可选播放一个“离开”特写。
         </p>
@@ -397,13 +364,99 @@ Hooks.on("renderWallConfig", (app, html, data) => {
         </div>
       </div>
     </fieldset>
-  `);
+  `;
 
-  // FilePicker：复用 Foundry 的 FilePicker
-  block.find(".file-picker").on("click", (event) => {
+  // ===== 把 blockHtml 塞进一个 Tab 里 =====
+  const hasTabs = html.find(".sheet-tabs.tabs").length > 0;
+  const contentRoot = html.find(".sheet-body").length
+    ? html.find(".sheet-body")
+    : form;
+
+  // 追加 Door Cut-in 按钮
+  const doorcutinTab = $(`
+    <div class="tab door-cutin-wall-tab" data-tab="doorcutin">
+      ${blockHtml}
+    </div>`);
+
+  if (hasTabs) {
+    // 原来在底部的 nav（包含 Basic / Perceptive / Triggers）
+    const navBottom = html.find("nav.sheet-tabs").first();
+
+    // 克隆一份作为顶部 nav
+    const navTop = navBottom.clone();
+
+    // 给顶部 nav 加上 Door Cut-in 按钮（如果还没有）
+    if (!navTop.find('[data-tab="doorcutin"]').length) {
+      navTop.append(
+        $(`<a class="item" data-tab="doorcutin">
+            <i class="fas fa-film"></i> Door Cut-in
+          </a>`)
+      );
+    }
+
+    // 把原来的底部 nav 隐藏，并从 Tab 选择器中移除
+    navBottom
+      .removeClass("tabs")                 // 这样 .tabs 只会匹配顶部这一份
+      .addClass("doorcutin-nav-bottom")
+      .hide();
+
+    // 顶部 nav 插到内容区域前面（窗口上半部分）
+    if (contentRoot.length) {
+      navTop.insertBefore(contentRoot);
+    } else {
+      form.prepend(navTop);
+    }
+
+    // Door-Cutin 的 tab 内容插到内容容器里
+    contentRoot.append(doorcutinTab);
+
+    // 重新绑定 tabs，沿用原来的 contentSelector / initial
+    const el = html[0];
+    const oldTabs = app.options.tabs?.[0] ?? {};
+    const contentSelector = oldTabs.contentSelector || "form";
+    const initial = oldTabs.initial || "basic";
+
+    app.options.tabs = [{ navSelector: ".tabs", contentSelector, initial }];
+    app._tabs = app._createTabHandlers();
+    app._tabs.forEach(t => t.bind(el));
+  } else {
+    // 没有 tabs：Basic + Door-Cutin
+    let root = form.length ? form : html;
+
+    const basicTab = $('<div class="tab" data-tab="basic"></div>');
+    $('> *:not(button):not(footer)', root).each(function () {
+      basicTab.append(this);
+    });
+
+    const nav = $(`
+      <nav class="sheet-tabs tabs">
+        <a class="item active" data-tab="basic">
+          <i class="fas fa-university"></i> 基础
+        </a>
+        <a class="item" data-tab="doorcutin">
+          <i class="fas fa-film"></i> Door Cut-in
+        </a>
+      </nav>`);
+
+    $(root)
+      .prepend(nav)
+      .prepend(doorcutinTab)
+      .prepend(basicTab);
+
+    app.options.tabs = [{ navSelector: ".tabs", contentSelector: "form", initial: "basic" }];
+    app.options.height = "auto";
+    const el = html[0];
+    app._tabs = app._createTabHandlers();
+    app._tabs.forEach(t => t.bind(el));
+    app.setPosition();
+  }
+
+  // ===== FilePicker 按钮（只绑定 Door-Cutin tab 里的） =====
+  doorcutinTab.find(".file-picker").on("click.doorcutin", (event) => {
+    event.preventDefault();
     const button = event.currentTarget;
     const inputName = button.dataset.target;
-    const input = block.find(`[name="${inputName}"]`);
+    const input = doorcutinTab.find(`[name="${inputName}"]`);
 
     new FilePicker({
       type: button.dataset.type || "image",
@@ -412,13 +465,10 @@ Hooks.on("renderWallConfig", (app, html, data) => {
     }).render(true);
   });
 
-  // 插入到门选项之后
-  anchor.after(block);
-
+  // 调整窗口宽度
   try {
     const win = html.closest(".app.window-app");
-    const minWidth = 780;        // 你可以改成 800 / 900 看效果
-
+    const minWidth = 780;
     if (win.length && win.width() < minWidth) {
       win.css("width", minWidth + "px");
     }
@@ -426,10 +476,7 @@ Hooks.on("renderWallConfig", (app, html, data) => {
     console.warn("door-cutin | adjust WallConfig width failed:", e);
   }
 
-  // 统一保存逻辑
-  form.off("submit.doorcutin-save");
-
-  // 统一保存逻辑
+  // ===== 统一保存逻辑（保持你原来的这一段） =====
   form.off("submit.doorcutin-save");
   form.on("submit.doorcutin-save", async (ev) => {
     const fd = new FormData(ev.currentTarget);
@@ -443,12 +490,8 @@ Hooks.on("renderWallConfig", (app, html, data) => {
 
     const dcSoftRaw = fd.get("doorcutin-soft-dc");
     const dcHardRaw = fd.get("doorcutin-hard-dc");
-    const dcSoft = dcSoftRaw !== null && dcSoftRaw !== ""
-      ? Number(dcSoftRaw)
-      : undefined;
-    const dcHard = dcHardRaw !== null && dcHardRaw !== ""
-      ? Number(dcHardRaw)
-      : undefined;
+    const dcSoft = dcSoftRaw !== null && dcSoftRaw !== "" ? Number(dcSoftRaw) : undefined;
+    const dcHard = dcHardRaw !== null && dcHardRaw !== "" ? Number(dcHardRaw) : undefined;
 
     const softLabel    = String(fd.get("doorcutin-soft-label")  || "").trim();
     const softRollType = String(fd.get("doorcutin-soft-rollType") || "none");
@@ -465,7 +508,6 @@ Hooks.on("renderWallConfig", (app, html, data) => {
     const hardFailText    = String(fd.get("doorcutin-hard-failText")    || "").trim();
     const hardCloseOnSuccess = fd.get("doorcutin-hard-closeOnSuccess") === "on";
     const hardCloseOnFail    = fd.get("doorcutin-hard-closeOnFail")    === "on";
-
 
     const leaveLabel   = String(fd.get("doorcutin-leave-label") || "").trim();
 
@@ -488,7 +530,7 @@ Hooks.on("renderWallConfig", (app, html, data) => {
         enableLeave,
         dcSoft,
         dcHard,
-        
+
         softLabel,
         softRollType,
         softRollKey,
@@ -520,11 +562,3 @@ Hooks.on("renderWallConfig", (app, html, data) => {
     await wall.setFlag("door-cutin", "doorCutin", newCfg);
   });
 });
-
-
-
-
-
-
-
-

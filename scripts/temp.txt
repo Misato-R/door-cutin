@@ -1,296 +1,530 @@
-// modules/door-cutin/scripts/tile-trap.js 
-// 负责“踩 Tile 陷阱 播放特写 + 广播给 GM/所有人”
+// 未来会包含：为单扇门配置图片、检定开关与 DC 的表单；以及测试播放按钮
+console.log("door-cutin | ui placeholder loaded");
 
-const MOD_ID = "door-cutin";
 
-function debugEnabled() {
+// ui.js —— Door Cut-in 的墙体配置 UI
+// 稳定方案：直接在“门选项”下面插一个大块
+
+// ui.js —— Door Cut-in 的墙体配置 UI
+// 稳定方案：直接在“门选项”下面插一个大块
+
+Hooks.on("renderWallConfig", (app, html, data) => {
+  const wall = app.object;
+  // 只对“门”生效
+  if (wall.door === 0) return;
+
+  console.log("door-cutin | renderWallConfig");
+
+  const cfg = wall.getFlag("door-cutin", "doorCutin") ?? {};
+
+  const preview      = cfg.preview      || "";
+  const desc         = cfg.description  || "";
+
+  // 轻推配置
+  const softEnabled  = cfg.enableSoft  !== false;  // 默认启用
+  const softVideo    = cfg.videoSoft   || "";
+  const softSound    = cfg.soundSoft   || "";
+  const softDc       = Number.isFinite(cfg.dcSoft) ? cfg.dcSoft : "";
+  const softLabel    = cfg.softLabel   || "轻轻推开（潜行）";
+  const softRollType = cfg.softRollType || "skill"; // none | skill | ability
+  const softRollKey  = cfg.softRollKey  || "ste";
+
+  const softSuccessText = cfg.softSuccessText || "";
+  const softFailText    = cfg.softFailText    || "";
+  // 软开门默认：成功后关闭，失败后也关闭（保持你现在的行为）
+  const softCloseOnSuccess = cfg.softCloseOnSuccess !== false;
+  const softCloseOnFail    = cfg.softCloseOnFail    !== false;
+
+
+  // 踹门配置
+  const hardEnabled  = cfg.enableHard  !== false;
+  const hardVideo    = cfg.videoHard   || "";
+  const hardSound    = cfg.soundHard   || "";
+  const hardDc       = Number.isFinite(cfg.dcHard) ? cfg.dcHard : "";
+  const hardLabel    = cfg.hardLabel   || "一脚踹开（力量）";
+  const hardRollType = cfg.hardRollType || "ability";
+  const hardRollKey  = cfg.hardRollKey  || "str";
+
+  const hardSuccessText = cfg.hardSuccessText || "";
+  const hardFailText    = cfg.hardFailText    || "";
+  // 踹门默认：成功后关闭，失败后不关闭（也保持你现在的行为）
+  const hardCloseOnSuccess = cfg.hardCloseOnSuccess !== false;
+  const hardCloseOnFail    = !!cfg.hardCloseOnFail;
+
+  //离开配置
+  const leaveEnabled  = cfg.enableLeave !== false;
+  const leaveLabel    = cfg.leaveLabel  || "转身离开";
+
+  const leaveVideo    = cfg.videoLeave  || "";
+  const leaveSound    = cfg.soundLeave  || "";
+
+  const leaveSuccessText = cfg.leaveSuccessText || "";
+  const leaveFailText    = cfg.leaveFailText    || "";
+
+  // 默认：离开时成功/失败都不关闭 Door-Cutin（以后你想改再调）
+  const leaveCloseOnSuccess = !!cfg.leaveCloseOnSuccess;
+  const leaveCloseOnFail    = !!cfg.leaveCloseOnFail;
+
+
+
+  const form = html.find("form");
+  if (!form.length) return;
+
+  // 找一个合适的锚点（门选项 fieldset 或 ds 下拉）
+  let anchor = html.find("fieldset.door-options");
+  if (!anchor.length) {
+    anchor = html.find('select[name="ds"]').closest(".form-group");
+  }
+  if (!anchor.length) {
+    anchor = form.children().last();
+  }
+
+  // 防止重复插入
+  if (html.find(".door-cutin-ui-block").length) return;
+
+  const block = $(`
+    <fieldset class="door-cutin-ui-block">
+      <legend>
+        <i class="fas fa-film"></i>
+        Door Cut-in
+      </legend>
+
+      <!-- 预览图片路径 -->
+      <div class="form-group">
+        <label>特写预览图片路径</label>
+        <div class="form-fields">
+          <input type="text"
+                 name="doorcutin-preview"
+                 value="${preview}"
+                 style="flex:1;">
+          <button type="button"
+                  class="file-picker"
+                  data-type="imagevideo"
+                  data-target="doorcutin-preview">
+            <i class="fas fa-file-import"></i>
+          </button>
+        </div>
+        <p class="hint">
+          Door-Cutin 弹窗顶部显示的图片，例如：<br>
+          <code>modules/door-cutin/assets/cutin/images/door_preview.jpg</code>
+        </p>
+      </div>
+
+      <!-- 描述文本 -->
+      <div class="form-group">
+        <label>弹窗描述文本</label>
+        <div class="form-fields">
+          <textarea name="doorcutin-description"
+                    rows="3"
+                    style="width:100%;resize:vertical;">${desc}</textarea>
+        </div>
+        <p class="hint">
+          显示在 Door-Cutin 对话框中的说明文字，可写气氛描述、提示等。<br>
+          若留空，则使用默认文本：“这扇门看起来有点可疑……”
+        </p>
+      </div>
+
+      <hr>
+
+      <!-- 轻轻推开 -->
+      <div class="form-group">
+        <label>动作：轻轻推开</label>
+        <div class="form-fields" style="display:flex;align-items:center;gap:0.5em;">
+          <!-- ① 按钮文字 -->
+          <input type="text"
+                 name="doorcutin-soft-label"
+                 value="${softLabel}"
+                 style="flex:1;">
+
+          <!-- ② 启用开关 -->
+          <label style="white-space:nowrap;">
+            <input type="checkbox" name="doorcutin-soft-enabled" ${softEnabled ? "checked" : ""}>
+            启用此按钮
+          </label>
+
+          <!-- ③ 检定设置（类型 + key） -->
+          <div style="display:flex;align-items:center;gap:0.25em;">
+            <select name="doorcutin-soft-rollType">
+              <option value="none"   ${softRollType === "none"   ? "selected" : ""}>不检定</option>
+              <option value="skill"  ${softRollType === "skill"  ? "selected" : ""}>技能检定</option>
+              <option value="ability"${softRollType === "ability"? "selected" : ""}>属性检定</option>
+            </select>
+            <input type="text"
+                   name="doorcutin-soft-rollKey"
+                   value="${softRollKey}"
+                   style="width:5em;"
+                   placeholder="ste / str 等">
+          </div>
+
+          <!-- ④ DC -->
+          <label style="white-space:nowrap;">
+            DC：
+            <input type="number"
+                   name="doorcutin-soft-dc"
+                   value="${softDc}"
+                   style="width:4em;">
+          </label>
+        </div>
+      </div>
+
+      <!-- 轻推：成功设置 -->
+      <div class="form-group">
+        <label>轻推成功时</label>
+        <div class="form-fields" style="flex-direction:column;gap:0.25em;">
+          <div style="display:flex;align-items:center;gap:0.5em;">
+            <span style="white-space:nowrap;">特写视频</span>
+            <input type="text"
+                   name="doorcutin-soft-video"
+                   value="${softVideo}"
+                   style="flex:1;">
+            <button type="button"
+                    class="file-picker"
+                    data-type="video"
+                    data-target="doorcutin-soft-video">
+              <i class="fas fa-file-import"></i>
+            </button>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:0.5em;">
+            <span style="white-space:nowrap;">成功音效</span>
+            <input type="text"
+                   name="doorcutin-soft-sound"
+                   value="${softSound}"
+                   style="flex:1;">
+            <button type="button"
+                    class="file-picker"
+                    data-type="audio"
+                    data-target="doorcutin-soft-sound">
+              <i class="fas fa-file-import"></i>
+            </button>
+          </div>
+
+          <textarea name="doorcutin-soft-successText"
+                    rows="2"
+                    style="width:100%;resize:vertical;"
+                    placeholder="成功后弹窗内容（可留空，使用默认提示）">${softSuccessText}</textarea>
+
+          <label style="margin-top:0.25em;">
+            <input type="checkbox"
+                   name="doorcutin-soft-closeOnSuccess"
+                   ${softCloseOnSuccess ? "checked" : ""}>
+            成功后关闭本门的 Door-Cutin（变成普通门）
+          </label>
+        </div>
+      </div>
+
+      <!-- 轻推：失败设置 -->
+      <div class="form-group">
+        <label>轻推失败时</label>
+        <div class="form-fields" style="flex-direction:column;gap:0.25em;">
+          <textarea name="doorcutin-soft-failText"
+                    rows="2"
+                    style="width:100%;resize:vertical;"
+                    placeholder="失败后弹窗内容（可留空，使用默认提示）">${softFailText}</textarea>
+
+          <label>
+            <input type="checkbox"
+                   name="doorcutin-soft-closeOnFail"
+                   ${softCloseOnFail ? "checked" : ""}>
+            失败后关闭本门的 Door-Cutin
+          </label>
+        </div>
+      </div>
+
+      <hr>
+
+
+      <!-- 一脚踹开 -->
+      <div class="form-group">
+        <label>动作：一脚踹开</label>
+        <div class="form-fields" style="display:flex;align-items:center;gap:0.5em;">
+          <!-- ① 按钮文字 -->
+          <input type="text"
+                 name="doorcutin-hard-label"
+                 value="${hardLabel}"
+                 style="flex:1;">
+
+          <!-- ② 启用开关 -->
+          <label style="white-space:nowrap;">
+            <input type="checkbox" name="doorcutin-hard-enabled" ${hardEnabled ? "checked" : ""}>
+            启用此按钮
+          </label>
+
+          <!-- ③ 检定设置 -->
+          <div style="display:flex;align-items:center;gap:0.25em;">
+            <select name="doorcutin-hard-rollType">
+              <option value="none"   ${hardRollType === "none"   ? "selected" : ""}>不检定</option>
+              <option value="skill"  ${hardRollType === "skill"  ? "selected" : ""}>技能检定</option>
+              <option value="ability"${hardRollType === "ability"? "selected" : ""}>属性检定</option>
+            </select>
+            <input type="text"
+                   name="doorcutin-hard-rollKey"
+                   value="${hardRollKey}"
+                   style="width:5em;"
+                   placeholder="str / ath 等">
+          </div>
+
+          <!-- ④ DC -->
+          <label style="white-space:nowrap;">
+            DC：
+            <input type="number"
+                   name="doorcutin-hard-dc"
+                   value="${hardDc}"
+                   style="width:4em;">
+          </label>
+        </div>
+      </div>
+
+      <!-- 踹门：成功设置 -->
+      <div class="form-group">
+        <label>踹门成功时</label>
+        <div class="form-fields" style="flex-direction:column;gap:0.25em;">
+          <div style="display:flex;align-items:center;gap:0.5em;">
+            <span style="white-space:nowrap;">特写视频</span>
+            <input type="text"
+                   name="doorcutin-hard-video"
+                   value="${hardVideo}"
+                   style="flex:1;">
+            <button type="button"
+                    class="file-picker"
+                    data-type="video"
+                    data-target="doorcutin-hard-video">
+              <i class="fas fa-file-import"></i>
+            </button>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:0.5em;">
+            <span style="white-space:nowrap;">成功音效</span>
+            <input type="text"
+                   name="doorcutin-hard-sound"
+                   value="${hardSound}"
+                   style="flex:1;">
+            <button type="button"
+                    class="file-picker"
+                    data-type="audio"
+                    data-target="doorcutin-hard-sound">
+              <i class="fas fa-file-import"></i>
+            </button>
+          </div>
+
+          <textarea name="doorcutin-hard-successText"
+                    rows="2"
+                    style="width:100%;resize:vertical;"
+                    placeholder="成功后弹窗内容（可留空，使用默认提示）">${hardSuccessText}</textarea>
+
+          <label style="margin-top:0.25em;">
+            <input type="checkbox"
+                   name="doorcutin-hard-closeOnSuccess"
+                   ${hardCloseOnSuccess ? "checked" : ""}>
+            成功后关闭本门的 Door-Cutin（后续视作普通门）
+          </label>
+        </div>
+      </div>
+
+      <!-- 踹门：失败设置 -->
+      <div class="form-group">
+        <label>踹门失败时</label>
+        <div class="form-fields" style="flex-direction:column;gap:0.25em;">
+          <textarea name="doorcutin-hard-failText"
+                    rows="2"
+                    style="width:100%;resize:vertical;"
+                    placeholder="失败后弹窗内容（可留空，使用默认提示）">${hardFailText}</textarea>
+
+          <label>
+            <input type="checkbox"
+                   name="doorcutin-hard-closeOnFail"
+                   ${hardCloseOnFail ? "checked" : ""}>
+            失败后关闭本门的 Door-Cutin
+          </label>
+        </div>
+      </div>
+
+      <hr>
+
+
+      <!-- 转身离开 -->
+      <div class="form-group">
+        <label>动作：转身离开</label>
+        <div class="form-fields">
+          <label style="white-space:nowrap;">
+            <input type="checkbox" name="doorcutin-leave-enabled" ${leaveEnabled ? "checked" : ""}>
+            启用此按钮
+          </label>
+        </div>
+        <div class="form-group">
+          <label>按钮文字</label>
+          <div class="form-fields">
+            <input type="text"
+                   name="doorcutin-leave-label"
+                   value="${leaveLabel}"
+                   style="width:100%;">
+          </div>
+        </div>
+        <p class="hint">
+          选择“转身离开”时，不会改变门的状态，可选播放一个“离开”特写。
+        </p>
+
+        <div class="form-group">
+          <label>离开特写视频（可选）</label>
+          <div class="form-fields">
+            <input type="text"
+                   name="doorcutin-leave-video"
+                   value="${leaveVideo}"
+                   style="flex:1;">
+            <button type="button"
+                    class="file-picker"
+                    data-type="video"
+                    data-target="doorcutin-leave-video">
+              <i class="fas fa-file-import"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>离开音效（可选）</label>
+          <div class="form-fields">
+            <input type="text"
+                   name="doorcutin-leave-sound"
+                   value="${leaveSound}"
+                   style="flex:1;">
+            <button type="button"
+                    class="file-picker"
+                    data-type="audio"
+                    data-target="doorcutin-leave-sound">
+              <i class="fas fa-file-import"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </fieldset>
+  `);
+
+  // FilePicker：复用 Foundry 的 FilePicker
+  block.find(".file-picker").on("click", (event) => {
+    const button = event.currentTarget;
+    const inputName = button.dataset.target;
+    const input = block.find(`[name="${inputName}"]`);
+
+    new FilePicker({
+      type: button.dataset.type || "image",
+      current: input.val(),
+      callback: (path) => input.val(path)
+    }).render(true);
+  });
+
+  // 插入到门选项之后
+  anchor.after(block);
+
   try {
-    return game.settings.get(MOD_ID, "debug");
-  } catch {
-    return false;
-  }
-}
+    const win = html.closest(".app.window-app");
+    const minWidth = 780;        // 你可以改成 800 / 900 看效果
 
-function trapLog(...args) {
-  if (debugEnabled()) {
-    console.log(`${MOD_ID} | trap |`, ...args);
-  }
-}
-
-Hooks.once("ready", () => {
-  trapLog("tile trap system ready");
-});
-
-Hooks.on("canvasReady", () => {
-  trapLog("tile trap | canvasReady");
-});
-
-/**
- * 使用 preUpdateToken：
- * 用 tokenDoc 的旧坐标 和 change 里的新坐标，判断
- * “这一脚是不是从 tile 外 → tile 内（发生矩形相交）”
- */
-Hooks.on("preUpdateToken", (tokenDoc, change, options, userId) => {
-  if (!canvas?.scene) return;
-
-  if (!("x" in change) && !("y" in change)) return;
-  if (userId !== game.user.id) return;
-
-  const gridSize = canvas.grid.size ?? 100;
-  const w = (tokenDoc.width  ?? 1) * gridSize;
-  const h = (tokenDoc.height ?? 1) * gridSize;
-
-  const fromRect = {
-    x: tokenDoc.x,
-    y: tokenDoc.y,
-    w,
-    h
-  };
-
-  const toRect = {
-    x: change.x ?? tokenDoc.x,
-    y: change.y ?? tokenDoc.y,
-    w,
-    h
-  };
-
-  trapLog("preUpdateToken move", {
-    tokenId: tokenDoc.id,
-    from: { x: fromRect.x, y: fromRect.y },
-    to:   { x: toRect.x,   y: toRect.y }
-  });
-
-  for (const tile of canvas.tiles.placeables) {
-    const cfg = tile.document.getFlag(MOD_ID, "tileTrap");
-    if (!cfg || cfg.enabled === false) continue;
-
-    const mode = cfg.mode || "once"; // once / repeat
-    if (mode === "once" && cfg.armed === false) continue;
-
-    const wasInside = rectIntersectsTile(fromRect, tile);
-    const insideNow = rectIntersectsTile(toRect, tile);
-
-    trapLog("trap | check tile", {
-      tileId: tile.id,
-      tileName: tile.document.name,
-      wasInside,
-      insideNow
-    });
-
-    // 只有“上一格不相交 & 这一格相交”时才触发
-    if (!wasInside && insideNow) {
-      handleTrapTrigger(tile, cfg, tokenDoc, userId);
+    if (win.length && win.width() < minWidth) {
+      win.css("width", minWidth + "px");
     }
-  }
-});
-
-/** 判断 token 矩形是否与 tile 矩形相交 */
-function rectIntersectsTile(tokenRect, tile) {
-  const tx = tile.document.x;
-  const ty = tile.document.y;
-  const tw = tile.document.width;
-  const th = tile.document.height;
-
-  const tRight  = tx + tw;
-  const tBottom = ty + th;
-
-  const aLeft   = tokenRect.x;
-  const aTop    = tokenRect.y;
-  const aRight  = tokenRect.x + tokenRect.w;
-  const aBottom = tokenRect.y + tokenRect.h;
-
-  const separated =
-    aRight  <= tx      ||
-    aLeft   >= tRight  ||
-    aBottom <= ty      ||
-    aTop    >= tBottom;
-
-  return !separated;
-}
-
-/**
- * 真正处理陷阱触发：
- *  - once 模式：armed -> false
- *  - 脚下 Sequencer 特效（支持两个 fx，loop + size）
- *  - （可选）全屏 cut-in
- *  - 豁免弹窗
- *  - 广播
- */
-async function handleTrapTrigger(tile, cfg, tokenDoc, userId) {
-  const mode      = cfg.mode || "once";
-  const video     = cfg.video || null;
-  const sound     = cfg.sound || null;
-  const actor     = tokenDoc.actor;
-
-  // 收集 ground FX：
-  const fxList = [];
-
-  // 新版 fx1 / fx2
-  if (cfg.fx1?.path) {
-    fxList.push({
-      path: cfg.fx1.path,
-      loop: !!cfg.fx1.loop,
-      size: Number(cfg.fx1.size) || 5
-    });
-  }
-  if (cfg.fx2?.path) {
-    fxList.push({
-      path: cfg.fx2.path,
-      loop: !!cfg.fx2.loop,
-      size: Number(cfg.fx2.size) || 5
-    });
+  } catch (e) {
+    console.warn("door-cutin | adjust WallConfig width failed:", e);
   }
 
-  // 兼容旧字段 groundFx：当 fx1/fx2 都没配时用它
-  if (!fxList.length && cfg.groundFx) {
-    fxList.push({
-      path: cfg.groundFx,
-      loop: false,
-      size: 5
-    });
-  }
+  // 统一保存逻辑
+  form.off("submit.doorcutin-save");
 
-  trapLog("handleTrapTrigger", {
-    tileId: tile.id,
-    tileName: tile.document.name,
-    mode,
-    video,
-    sound,
-    fxList,
-    actor: actor?.name
-  });
+  // 统一保存逻辑
+  form.off("submit.doorcutin-save");
+  form.on("submit.doorcutin-save", async (ev) => {
+    const fd = new FormData(ev.currentTarget);
 
-  if (mode === "once") {
+    const preview     = String(fd.get("doorcutin-preview")     || "").trim();
+    const description = String(fd.get("doorcutin-description") || "").trim();
+
+    const enableSoft  = fd.get("doorcutin-soft-enabled")  === "on";
+    const enableHard  = fd.get("doorcutin-hard-enabled")  === "on";
+    const enableLeave = fd.get("doorcutin-leave-enabled") === "on";
+
+    const dcSoftRaw = fd.get("doorcutin-soft-dc");
+    const dcHardRaw = fd.get("doorcutin-hard-dc");
+    const dcSoft = dcSoftRaw !== null && dcSoftRaw !== ""
+      ? Number(dcSoftRaw)
+      : undefined;
+    const dcHard = dcHardRaw !== null && dcHardRaw !== ""
+      ? Number(dcHardRaw)
+      : undefined;
+
+    const softLabel    = String(fd.get("doorcutin-soft-label")  || "").trim();
+    const softRollType = String(fd.get("doorcutin-soft-rollType") || "none");
+    const softRollKey  = String(fd.get("doorcutin-soft-rollKey")  || "").trim();
+    const softSuccessText = String(fd.get("doorcutin-soft-successText") || "").trim();
+    const softFailText    = String(fd.get("doorcutin-soft-failText")    || "").trim();
+    const softCloseOnSuccess = fd.get("doorcutin-soft-closeOnSuccess") === "on";
+    const softCloseOnFail    = fd.get("doorcutin-soft-closeOnFail")    === "on";
+
+    const hardLabel    = String(fd.get("doorcutin-hard-label")  || "").trim();
+    const hardRollType = String(fd.get("doorcutin-hard-rollType") || "none");
+    const hardRollKey  = String(fd.get("doorcutin-hard-rollKey")  || "").trim();
+    const hardSuccessText = String(fd.get("doorcutin-hard-successText") || "").trim();
+    const hardFailText    = String(fd.get("doorcutin-hard-failText")    || "").trim();
+    const hardCloseOnSuccess = fd.get("doorcutin-hard-closeOnSuccess") === "on";
+    const hardCloseOnFail    = fd.get("doorcutin-hard-closeOnFail")    === "on";
+
+
+    const leaveLabel   = String(fd.get("doorcutin-leave-label") || "").trim();
+
+    const videoSoft  = String(fd.get("doorcutin-soft-video")  || "").trim();
+    const soundSoft  = String(fd.get("doorcutin-soft-sound")  || "").trim();
+    const videoHard  = String(fd.get("doorcutin-hard-video")  || "").trim();
+    const soundHard  = String(fd.get("doorcutin-hard-sound")  || "").trim();
+    const videoLeave = String(fd.get("doorcutin-leave-video") || "").trim();
+    const soundLeave = String(fd.get("doorcutin-leave-sound") || "").trim();
+
+    const oldCfg = wall.getFlag("door-cutin", "doorCutin") ?? {};
+
     const newCfg = foundry.utils.mergeObject(
-      cfg,
-      { armed: false },
+      oldCfg,
+      {
+        preview,
+        description,
+        enableSoft,
+        enableHard,
+        enableLeave,
+        dcSoft,
+        dcHard,
+        
+        softLabel,
+        softRollType,
+        softRollKey,
+        softSuccessText,
+        softFailText,
+        softCloseOnSuccess,
+        softCloseOnFail,
+
+        hardLabel,
+        hardRollType,
+        hardRollKey,
+        hardSuccessText,
+        hardFailText,
+        hardCloseOnSuccess,
+        hardCloseOnFail,
+
+        leaveLabel,
+        videoSoft,
+        soundSoft,
+        videoHard,
+        soundHard,
+        videoLeave,
+        soundLeave
+      },
       { inplace: false }
     );
-    await tile.document.setFlag(MOD_ID, "tileTrap", newCfg);
-    trapLog("trap disarmed (once mode)", { tileId: tile.id });
-  }
 
-  const tokenObj = canvas.tokens.get(tokenDoc.id);
-
-  // 脚下爆炸特效（可能有多个）
-  if (userId === game.user.id && fxList.length && typeof Sequence !== "undefined" && tokenObj) {
-    try {
-      const seq = new Sequence();
-
-      for (const fx of fxList) {
-        const size = fx.size || 5;
-
-        let eff = seq.effect()
-          .file(fx.path)
-          .atLocation(tokenObj)
-          .belowTokens(false)
-          .scaleToObject(size); // 大致等于 token 尺寸的 size 倍
-
-        if (fx.loop) {
-          eff.persist(); // 持续播放，需用 Sequencer 的 UI 手动清理
-        }
-      }
-
-      await seq.play({ broadcast: false });
-    } catch (e) {
-      console.error("door-cutin | trap groundFx error:", e);
-    }
-  }
-
-  // 全屏 cut-in（可选）
-  if (userId === game.user.id && window.DoorCutin?.testLocal && video) {
-    window.DoorCutin.testLocal(video, sound);
-  }
-
-  // 豁免对话框（只对触发者自己）
-  if (userId === game.user.id && actor) {
-    await showTrapSaveDialog(actor, cfg);
-  }
-
-  // 广播给 GM / 其他玩家
-  notifyTrapTriggered(actor, tile, mode);
-}
-
-/** 弹出豁免相关对话框 */
-async function showTrapSaveDialog(actor, cfg) {
-  const saveAbility = cfg.saveAbility || "dex";
-  const saveDc      = Number.isFinite(cfg.saveDc) ? cfg.saveDc : 15;
-  const promptText  = cfg.promptText || "一颗火球在你脚下爆炸！请进行一次敏捷豁免检定。";
-  const successText = cfg.successText || "你敏捷地闪到一旁，只受到了极小的伤害。";
-  const failText    = cfg.failText || "你被火焰吞没，感到一阵剧痛！（伤害由 DM 掷骰）";
-
-  return new Promise(resolve => {
-    const d = new Dialog({
-      title: "火球陷阱！",
-      content: `<p>${promptText}</p>`,
-      buttons: {
-        save: {
-          label: `进行豁免检定 (DC ${saveDc})`,
-          callback: async () => {
-            const success = await rollTrapSave(actor, {
-              ability: saveAbility,
-              dc: saveDc
-            });
-
-            const msg = success ? successText : failText;
-
-            new Dialog({
-              title: success ? "豁免成功" : "豁免失败",
-              content: `<p>${msg}</p>`,
-              buttons: {
-                ok: {
-                  label: "确定",
-                  callback: () => resolve(success)
-                }
-              },
-              default: "ok"
-            }).render(true);
-          }
-        }
-      },
-      default: "save",
-      close: () => resolve(null)
-    });
-    d.render(true);
+    console.log("door-cutin | save doorCutin config:", newCfg);
+    await wall.setFlag("door-cutin", "doorCutin", newCfg);
   });
-}
+});
 
-/** D&D5e 能力豁免检定 */
-async function rollTrapSave(actor, { ability, dc }) {
-  let roll = null;
 
-  try {
-    if (game.system.id === "dnd5e" && actor.rollAbilitySave) {
-      roll = await actor.rollAbilitySave(ability, { fastForward: true });
-    }
 
-    if (!roll) {
-      roll = await (new Roll("1d20")).roll({ async: true });
-      roll.toMessage({
-        speaker: ChatMessage.getSpeaker({ actor }),
-        flavor: `Trap Save (${ability.toUpperCase()})`
-      });
-    }
-  } catch (e) {
-    console.error("door-cutin | rollTrapSave error:", e);
-    return true;
-  }
 
-  const total = roll.total ?? 999;
-  return total >= dc;
-}
 
-/** 广播“某玩家触发了陷阱” */
-function notifyTrapTriggered(actor, tile, mode) {
-  try {
-    game.socket.emit(`module.${MOD_ID}`, {
-      type: "trap-trigger",
-      actorName: actor?.name || game.user.name,
-      tileName: tile.document.name || "",
-      mode,
-      userId: game.user.id
-    });
-  } catch (e) {
-    console.error("door-cutin | trap notify error:", e);
-  }
-}
+
+
+

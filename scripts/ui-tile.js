@@ -89,11 +89,9 @@
     log("renderTileConfig for tile", doc.id, cfg);
 
     const form = html.find("form");
-    const footer = form.find("footer.sheet-footer");
-    const insertBefore = footer.length ? footer : form;
 
     // 避免重复注入
-    form.find("fieldset.door-cutin-tile-trap").remove();
+    form.find("fieldset.door-cutin-tile-trap").closest(".door-cutin-tile-trap-tab").remove();
 
     const abilities = [
       { key: "str", label: "STR 力量" },
@@ -139,6 +137,7 @@
         </div>`;
     }
 
+    // 整个 Door-Cutin 表单块
     const htmlBlock = `
       <fieldset class="door-cutin-tile-trap">
         <legend><i class="fas fa-skull-crossbones"></i> Door Cut-in 陷阱</legend>
@@ -332,7 +331,6 @@
         <!-- 触发脚本宏（可选，多条） -->
         <div class="form-group">
           <label>触发宏</label>
-          <!-- 用 form-fields 包起来，并改成纵向排列 -->
           <div class="form-fields" style="flex-direction:column;align-items:flex-start;">
             <div class="macro-list" style="width:100%;">
               ${macroRowsHtml}
@@ -360,10 +358,69 @@
       </fieldset>
     `;
 
-    insertBefore.before(htmlBlock);
+    // ========= 关键部分：塞进 Tab =========
 
-    // ---------- 绑定宏添加/删除按钮 ----------
-    const fieldset = form.find("fieldset.door-cutin-tile-trap");
+    const hasTabs = html.find(".sheet-tabs.tabs").length > 0;
+    const contentRoot = html.find(".sheet-body").length
+      ? html.find(".sheet-body")
+      : form;
+
+    // 我们自己的 tab 容器
+    const trapTab = $(`
+      <div class="tab door-cutin-tile-trap-tab" data-tab="doorcutin-trap">
+        ${htmlBlock}
+      </div>`);
+
+    if (hasTabs) {
+      // 已经有 Tabs（比如 Monks Active Tiles）
+      const nav = html.find(".sheet-tabs.tabs");
+      if (!nav.find('[data-tab="doorcutin-trap"]').length) {
+        nav.append(
+          $(`<a class="item" data-tab="doorcutin-trap">
+              <i class="fas fa-skull-crossbones"></i> 陷阱
+            </a>`)
+        );
+      }
+
+      contentRoot.append(trapTab);
+
+      const el = html[0];
+      app._tabs = app._createTabHandlers();
+      app._tabs.forEach(t => t.bind(el));
+    } else {
+      // 没有 Tabs：自己造 Basic + 陷阱
+      let root = form.length ? form : html;
+
+      const basicTab = $('<div class="tab" data-tab="basic"></div>');
+      $('> *:not(button):not(footer)', root).each(function () {
+        basicTab.append(this);
+      });
+
+      const nav = $(`
+        <nav class="sheet-tabs tabs">
+          <a class="item active" data-tab="basic">
+            <i class="fas fa-image"></i> 基础
+          </a>
+          <a class="item" data-tab="doorcutin-trap">
+            <i class="fas fa-skull-crossbones"></i> 陷阱
+          </a>
+        </nav>`);
+
+      $(root)
+        .prepend(nav)
+        .prepend(trapTab)
+        .prepend(basicTab);
+
+      app.options.tabs = [{ navSelector: ".tabs", contentSelector: "form", initial: "basic" }];
+      app.options.height = "auto";
+      const el = html[0];
+      app._tabs = app._createTabHandlers();
+      app._tabs.forEach(t => t.bind(el));
+      app.setPosition();
+    }
+
+    // ---------- 绑定宏添加/删除按钮（改成在 trapTab 里找） ----------
+    const fieldset = trapTab.find("fieldset.door-cutin-tile-trap");
     const macroListDiv = fieldset.find(".macro-list");
 
     function bindRemoveHandlers(scope) {
@@ -372,15 +429,13 @@
           ev.preventDefault();
 
           const row   = $(ev.currentTarget).closest(".macro-row");
-          const index = row.data("index");              // 原来的 macros.<index>
-          const formEl = form[0];                      // 上面 const form = html.find("form");
+          const index = row.data("index");
+          const formEl = form[0];
 
-          // 用 Foundry 的 "-=" 语法告诉它删除这个键
           $(`<input type="hidden"
                     name="flags.${MOD_ID}.tileTrap.macros.-=${index}"
                     value="1">`).appendTo(formEl);
 
-          // 再从界面上移除这一行
           row.remove();
         });
       });
@@ -410,6 +465,7 @@
       bindRemoveHandlers(newRow);
     });
   }
+
 
 
   /**
