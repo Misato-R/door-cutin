@@ -21,7 +21,8 @@
     "scripts/main.js",
     "scripts/ui.js",
     "scripts/ui-tile.js",
-    "scripts/tile-trap.js"
+    "scripts/tile-trap.js",
+    "scripts/sequencer-database.js"
   ],
 
   "styles": [
@@ -41,7 +42,15 @@
     }
   ],
 
-  "packs": [],
+  "packs": [
+    {
+      "label": "Door Cut-in Macros",
+      "name": "door-cutin-macros",
+      "path": "packs/door-cutin-macros.db",
+      "type": "Macro",
+      "system": "dnd5e"
+    }
+  ],
 
   "relationships": {
     "requires": [
