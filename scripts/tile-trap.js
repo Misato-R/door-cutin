@@ -145,7 +145,7 @@ Hooks.on("preUpdateToken", (tokenDoc, change, options, userId) => {
       insideNow
     });
 
-    // ✅ 只有“上一格不相交 & 这一格相交”时才触发
+    // 只有“上一格不相交 & 这一格相交”时才触发
     if (!wasInside && insideNow) {
       handleTrapTrigger(tile, cfg, tokenDoc, userId);
     }

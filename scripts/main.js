@@ -70,10 +70,10 @@ Hooks.once("ready", () => {
   window.DoorCutin.testLocal = testCutinLocal;
   window.DoorCutin.testForEveryone = testCutinForEveryone;
 
-  // ⭐ Step2：安装 Tile 点击触发器
+  // 安装 Tile 点击触发器
   installTileClickTrigger();
 
-  // ⭐ 安装 socket 监听，用于接收玩家门操作广播
+  // 安装 socket 监听，用于接收玩家门操作广播
   game.socket.on(`module.${MOD_ID}`, data => {
     if (!data || !data.type) return;
 
@@ -302,7 +302,7 @@ async function handleDoorInteraction(wallDoc, targetState, cfg) {
             if (softCloseOnFail) {
               await setDoorCutinEnabled(wallDoc, false);
             }
-            await wallDoc.update({ ds: targetState }, { doorCutinBypass: true });
+            await wallDoc.update({ doorCutinBypass: true }); //{ ds: targetState },
           }
 
           resolve("soft");
@@ -371,6 +371,10 @@ async function handleDoorInteraction(wallDoc, targetState, cfg) {
       buttons,
       default: enableSoft ? "soft" : (enableHard ? "hard" : "leave"),
       close: () => resolve("close")
+    },{
+      width: "auto",      // 或 640 / 700 都行，看你喜好
+      height: "auto",  // 高度自适应
+      resizable: true  // 允许你手动拖拽
     });
 
     d.render(true);

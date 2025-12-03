@@ -17,7 +17,7 @@ if (workflow.isCritical) {
 		.scale(0.6)
 		.waitUntilFinished(-1000)
 	// 音效，可调整音量
-	.sound("modules/door-cutin/assets/sfx/p5.aac")
+	.sound("modules/door-cutin/assets/sfx/p5.ogg")
 		.volume(1.0)
 	.play()
 }

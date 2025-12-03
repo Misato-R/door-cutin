@@ -74,7 +74,7 @@
     const failText    = cfg.failText    ?? "";
     const preview     = cfg.preview     ?? "";
 
-    // ⭐ 多个宏：既兼容数组，也兼容 {0:"id",1:"id2"} 这种对象
+    // 多个宏：既兼容数组，也兼容 {0:"id",1:"id2"} 这种对象
     const rawMacros = cfg.macros ?? [];
     let macros = [];
     if (Array.isArray(rawMacros)) {
